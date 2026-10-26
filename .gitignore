@@ -4,3 +4,4 @@ __pycache__
 build
 dist
 make_version.py
+Thumbs.db
