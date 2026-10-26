@@ -5,3 +5,4 @@ build
 dist
 make_version.py
 Thumbs.db
+*egg-info
