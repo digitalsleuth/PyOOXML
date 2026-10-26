@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools >= 77.0.30"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pyooxml*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyooxml.pyooxml.VERSION"}
+
+[project]
+name = "pyooxml"
+dynamic = ["version"]
+dependencies = [
+    "PyQt6"
+]
+requires-python = ">=3.9"
+authors = [
+  {name = "Corey Forman (digitalsleuth)", email = "corey@digitalsleuth.ca"}
+]
+maintainers = [
+  {name = "Corey Forman (digitalsleuth)", email = "corey@digitalsleuth.ca"}
+]
+description = "View, edit and compare OOXML packages"
+keywords = ["digital forensics", "dfir", "ooxml", "docx", "xlsx", "pptx", "compare"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: X11 Applications :: Qt",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+
+[project.urls]
+Homepage = "https://github.com/digitalsleuth/PyOOXML"
+
+[project.gui-scripts]
+pyooxml = "pyooxml.pyooxml:main"
