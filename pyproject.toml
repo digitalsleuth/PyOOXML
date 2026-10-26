@@ -22,6 +22,7 @@ maintainers = [
   {name = "Corey Forman (digitalsleuth)", email = "corey@digitalsleuth.ca"}
 ]
 description = "View, edit and compare OOXML packages"
+readme = "README.md"
 keywords = ["digital forensics", "dfir", "ooxml", "docx", "xlsx", "pptx", "compare"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
