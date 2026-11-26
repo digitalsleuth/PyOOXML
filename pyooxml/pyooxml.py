@@ -9,92 +9,28 @@ import difflib
 import hashlib
 import html
 import os
+import posixpath
 import re
 import struct
 import sys
 import zipfile
 import zlib
-import base64
+import bisect
+import functools
 from xml.dom import minidom
 from xml.parsers import expat
 
-from PyQt6.QtCore import (
-    QMarginsF,
-    QRect,
-    QRectF,
-    QSize,
-    QSizeF,
-    Qt,
-    QThread,
-    QTimer,
-    QUrl,
-    pyqtSignal,
-)
-from PyQt6.QtGui import (
-    QAbstractTextDocumentLayout,
-    QAction,
-    QBrush,
-    QColor,
-    QDesktopServices,
-    QFont,
-    QFontDatabase,
-    QIcon,
-    QKeySequence,
-    QPageLayout,
-    QPageSize,
-    QPainter,
-    QPalette,
-    QPdfWriter,
-    QPixmap,
-    QSyntaxHighlighter,
-    QTextBlockFormat,
-    QTextCharFormat,
-    QTextCursor,
-    QTextDocument,
-    QTextOption,
-)
-from PyQt6.QtWidgets import (
-    QAbstractItemView,
-    QApplication,
-    QCheckBox,
-    QDialogButtonBox,
-    QFileDialog,
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QLineEdit,
-    QMainWindow,
-    QMessageBox,
-    QPlainTextEdit,
-    QProgressDialog,
-    QPushButton,
-    QScrollArea,
-    QSplitter,
-    QStackedWidget,
-    QStyle,
-    QTabWidget,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QVBoxLayout,
-    QWidget,
-)
-
 APP_NAME = "PyOOXML"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 GITHUB = "https://github.com/digitalsleuth/PyOOXML"
 XML_EXTS = (".xml", ".rels", ".vml")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp")
-OPEN_FILTER = (
-    "OOXML documents (*.docx *.docm *.dotx *.dotm *.xlsx *.xlsm *.xltx *.xltm "
-    "*.pptx *.pptm *.potx *.potm *.ppsx *.ppsm *.vsdx *.zip);;All files (*)"
-)
-PATH_ROLE = Qt.ItemDataRole.UserRole
+SEARCH_MAX_HITS = 5000
+SNIPPET_CONTEXT = 60
 _DECL_RE = re.compile(r"^\s*(<\?xml[^>]*\?>)")
 _ENCODING_RE = re.compile(r"(?i)^(\s*<\?xml[^>]*?encoding\s*=\s*[\"'])[^\"']*")
 REPORT_CONTEXT = 2
 REPORT_MAX_ROWS = 2000
-REPORT_ONE_SIDED_ROWS = 40
-REPORT_DPI = 150
 REPORT_BG = {"del": "#fbd0d0", "add": "#cdeed6", "chg": "#fff0b8", "pad": "#e8e8e8"}
 REPORT_MARK = {"l": "#f08a8a", "r": "#6fcf8a"}
 REPORT_STATUS = {
@@ -103,198 +39,112 @@ REPORT_STATUS = {
     "right": ("Only in right", "#b9e4c3"),
 }
 _TOKEN_RE = re.compile(r"\w+|\s+|[^\w\s]")
-__fingerprint__ = """
-AAABAAIAMDAAAAEAIACoJQAAJgAAABAQAAABACAAaAQAAM4lAAAoAAAAMAAAAGAAAAABACAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAC9hGcXr4JvPgAAAAAAAAAAwoJYDrZ+V2qwgWEDAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAC/hGd/uIRsVgAAAAC9gmJPqH1n/Zp8bn+hh4UBwYBUH7N6UPCnelWY
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAMWKcAy+h29Juot5BQAAAAC/hGV7s4Bm+6t/aaGpgW4KpX1o
-VpZ4ZfaReGaGAAAAALB7UUCjdk74nHdRcwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMOGajm7g2n3sIFt4KmB
-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
-"""
+_TEXT_RE = re.compile(r">([^<>]*)<")
+_PARA_END_RE = re.compile(r"</(?:[\w.-]+:)?(?:p|tr|row|si|comment)>")
+_BREAK_RE = re.compile(r"<(?:[\w.-]+:)?(?:tab|br|cr)\b")
+_XMP_RE = re.compile(
+    r"<(?:xmp|xap|photoshop|dc|exif|tiff):(CreatorTool|CreateDate|ModifyDate|MetadataDate"
+    r"|DateCreated|creator|rights|title|Make|Model)\b[^>]*>(.*?)</",
+    re.S,
+)
+_XMP_ATTR_RE = re.compile(
+    r'(?:xmp|xap|photoshop|dc|exif|tiff):'
+    r'(CreatorTool|CreateDate|ModifyDate|MetadataDate|DateCreated|Make|Model)="([^"]*)"'
+)
+_RELATIONSHIP_RE = re.compile(r"<Relationship\b[^>]*>")
+_ATTRIBUTE_RE = re.compile(r'([\w:]+)\s*=\s*"([^"]*)"')
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+IMAGE_FORMATS = {
+    ".png": "PNG",
+    ".jpg": "JPEG",
+    ".jpeg": "JPEG",
+    ".gif": "GIF",
+    ".bmp": "BMP",
+}
+IMAGE_HEX_LIMIT = 256
+PNG_COLOR_TYPES = {
+    0: "Grayscale",
+    2: "RGB",
+    3: "Indexed colour",
+    4: "Grayscale with alpha",
+    6: "RGB with alpha",
+}
+JPEG_SOF = {
+    0xC0: "Baseline DCT",
+    0xC1: "Extended sequential DCT",
+    0xC2: "Progressive DCT",
+    0xC3: "Lossless",
+    0xC5: "Differential sequential DCT",
+    0xC6: "Differential progressive DCT",
+    0xC7: "Differential lossless",
+    0xC9: "Arithmetic sequential DCT",
+    0xCA: "Arithmetic progressive DCT",
+    0xCB: "Arithmetic lossless",
+}
+JPEG_COMPONENTS = {1: "Grayscale", 3: "YCbCr / RGB", 4: "CMYK / YCCK"}
+BMP_COMPRESSION = {
+    0: "None (BI_RGB)",
+    1: "RLE 8-bit",
+    2: "RLE 4-bit",
+    3: "Bit fields",
+    4: "JPEG",
+    5: "PNG",
+}
+TIFF_TYPES = {
+    1: (1, "B"),
+    2: (1, None),
+    3: (2, "H"),
+    4: (4, "I"),
+    5: (8, "II"),
+    6: (1, "b"),
+    7: (1, None),
+    8: (2, "h"),
+    9: (4, "i"),
+    10: (8, "ii"),
+    11: (4, "f"),
+    12: (8, "d"),
+}
+EXIF_TAGS = {
+    0x010E: "Image description",
+    0x010F: "Camera make",
+    0x0110: "Camera model",
+    0x0112: "Orientation",
+    0x011A: "X resolution",
+    0x011B: "Y resolution",
+    0x0128: "Resolution unit",
+    0x0131: "Software",
+    0x0132: "Date/time modified",
+    0x013B: "Artist",
+    0x8298: "Copyright",
+}
+EXIF_SUB_TAGS = {
+    0x829A: "Exposure time",
+    0x829D: "F-number",
+    0x8827: "ISO speed",
+    0x9000: "Exif version",
+    0x9003: "Date/time original",
+    0x9004: "Date/time digitized",
+    0x920A: "Focal length",
+    0x9286: "User comment",
+    0xA002: "Exif image width",
+    0xA003: "Exif image height",
+    0xA420: "Image unique ID",
+    0xA430: "Camera owner",
+    0xA431: "Body serial number",
+    0xA433: "Lens make",
+    0xA434: "Lens model",
+    0xA435: "Lens serial number",
+}
+EXIF_ORIENTATIONS = {
+    1: "Normal",
+    2: "Mirrored horizontally",
+    3: "Rotated 180",
+    4: "Mirrored vertically",
+    5: "Mirrored, rotated 270 clockwise",
+    6: "Rotated 90 clockwise",
+    7: "Mirrored, rotated 90 clockwise",
+    8: "Rotated 270 clockwise",
+}
 
 
 def is_xml_part(name):
@@ -659,15 +509,552 @@ def hex_dump(data, limit=4096):
     return "\n".join(rows)
 
 
+def sniff_image(raw):
+    if raw.startswith(PNG_SIGNATURE):
+        return "PNG"
+    if raw.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return "GIF"
+    if raw[:2] == b"BM":
+        return "BMP"
+    if raw[:4] in (b"II*\x00", b"MM\x00*"):
+        return "TIFF"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "WebP"
+    return None
+
+
+def _ratio(pair):
+    return pair[0] / pair[1] if pair[1] else None
+
+
+def _tiff_value(order, kind, count, data):
+    size, code = TIFF_TYPES[kind]
+    if kind == 2:
+        return data.rstrip(b"\0").decode("utf-8", "replace")
+    if code is None:
+        return bytes(data)
+    values = struct.unpack_from(order + code * count, data)
+    if len(code) == 2:
+        values = list(zip(values[0::2], values[1::2]))
+    return values[0] if len(values) == 1 else list(values)
+
+
+def _format_exif(tag, value):
+    if isinstance(value, tuple) and len(value) == 2:
+        value = _ratio(value)
+    if tag == 0x9286 and isinstance(value, bytes):
+        return value[8:].decode("utf-8", "replace").strip("\0 ")
+    if tag in (0x9000,) and isinstance(value, bytes):
+        return value.decode("ascii", "replace")
+    if tag == 0x829A and value:
+        return f"1/{round(1 / value)} s" if value < 1 else f"{value:g} s"
+    if tag == 0x829D and value:
+        return f"f/{value:g}"
+    if tag == 0x920A and value:
+        return f"{value:g} mm"
+    if tag == 0x0112:
+        return EXIF_ORIENTATIONS.get(value, str(value))
+    if tag == 0x0128:
+        return {2: "inches", 3: "centimetres"}.get(value, str(value))
+    if isinstance(value, bytes):
+        return value[:32].hex()
+    if isinstance(value, list):
+        return ", ".join(
+            f"{_ratio(v):g}" if isinstance(v, tuple) and _ratio(v) is not None else str(v)
+            for v in value[:16]
+        )
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _degrees(parts, ref):
+    if not isinstance(parts, list) or len(parts) != 3:
+        return None
+    d, m, s = (_ratio(p) for p in parts)
+    if None in (d, m, s):
+        return None
+    sign = -1 if ref in ("S", "W") else 1
+    return sign * (d + m / 60 + s / 3600)
+
+
+def exif_rows(tiff):
+    order = {b"II": "<", b"MM": ">"}.get(tiff[:2])
+    if not order or struct.unpack_from(order + "H", tiff, 2)[0] != 42:
+        return []
+
+    def read(offset):
+        found = {}
+        if not 0 < offset <= len(tiff) - 2:
+            return found, 0
+        total = struct.unpack_from(order + "H", tiff, offset)[0]
+        for i in range(min(total, 512)):
+            at = offset + 2 + 12 * i
+            if at + 12 > len(tiff):
+                break
+            tag, kind, count = struct.unpack_from(order + "HHI", tiff, at)
+            if kind not in TIFF_TYPES:
+                continue
+            size = TIFF_TYPES[kind][0] * count
+            start = at + 8 if size <= 4 else struct.unpack_from(order + "I", tiff, at + 8)[0]
+            if size > 65536 or start + size > len(tiff):
+                continue
+            found[tag] = _tiff_value(order, kind, count, tiff[start : start + size])
+        after = offset + 2 + 12 * total
+        nxt = struct.unpack_from(order + "I", tiff, after)[0] if after + 4 <= len(tiff) else 0
+        return found, nxt
+
+    first, nxt = read(struct.unpack_from(order + "I", tiff, 4)[0])
+    sub = read(first[0x8769])[0] if isinstance(first.get(0x8769), int) else {}
+    gps = read(first[0x8825])[0] if isinstance(first.get(0x8825), int) else {}
+    thumb = read(nxt)[0] if nxt else {}
+    rows = [(name, _format_exif(tag, first[tag])) for tag, name in EXIF_TAGS.items() if tag in first]
+    rows += [(name, _format_exif(tag, sub[tag])) for tag, name in EXIF_SUB_TAGS.items() if tag in sub]
+    lat = _degrees(gps.get(2), gps.get(1))
+    lon = _degrees(gps.get(4), gps.get(3))
+    if lat is not None and lon is not None:
+        rows.append(("GPS position", f"{lat:.6f}, {lon:.6f}"))
+    if isinstance(gps.get(6), tuple) and _ratio(gps[6]) is not None:
+        below = gps.get(5) == b"\x01" or gps.get(5) == 1
+        rows.append(("GPS altitude", f"{'-' if below else ''}{_ratio(gps[6]):.1f} m"))
+    if isinstance(gps.get(7), list) and len(gps[7]) == 3:
+        h, m, s = (_ratio(p) or 0 for p in gps[7])
+        rows.append(("GPS date/time (UTC)", f"{gps.get(29, '')} {int(h):02d}:{int(m):02d}:{int(s):02d}".strip()))
+    if thumb and (0x0201 in thumb or 0x0111 in thumb):
+        rows.append(("Embedded thumbnail", "Yes"))
+    return rows
+
+
+def xmp_rows(text):
+    rows = []
+    for tag, value in _XMP_RE.findall(text) + _XMP_ATTR_RE.findall(text):
+        value = re.sub(r"<[^>]+>", " ", value).strip()
+        if value:
+            rows.append((tag, " ".join(value.split())))
+    return list(dict.fromkeys(rows))
+
+
+def _metadata_groups(exif, xmp):
+    groups = []
+    if exif:
+        try:
+            groups.append(("EXIF", exif_rows(exif)))
+        except (struct.error, ValueError, IndexError) as e:
+            groups.append(("EXIF", [("Could not read", f"{type(e).__name__}: {e}")]))
+    if xmp:
+        groups.append(("XMP", xmp_rows(xmp)))
+    return groups
+
+
+class HoverText(str):
+
+    def __new__(cls, text, tip):
+        obj = super().__new__(cls, text)
+        obj.tip = tip
+        return obj
+
+
+def _comment_row(data):
+    text = data.rstrip(b"\0")
+    try:
+        decoded = text.decode("utf-8")
+    except UnicodeDecodeError:
+        decoded = text.decode("latin-1")
+    if all(c.isprintable() or c in "\t\r\n" for c in decoded):
+        return ("Comment", decoded.strip())
+    shown = " ".join(f"{b:02x}" for b in data[:IMAGE_HEX_LIMIT])
+    tip = f"Binary data, {len(data)} bytes"
+    if len(data) > IMAGE_HEX_LIMIT:
+        shown += f" ... (first {IMAGE_HEX_LIMIT} of {len(data)} bytes)"
+    return ("Comment (hex dump)", HoverText(shown, tip))
+
+
+def _run_names(names):
+    counts = {}
+    for name in names:
+        counts[name] = counts.get(name, 0) + 1
+    return ", ".join(f"{n} x{c}" if c > 1 else n for n, c in counts.items())
+
+
+def png_info(raw):
+    size, rows, text, exif, xmp = None, [], [], None, None
+    names, bad, pos, end = [], [], 8, None
+    while pos + 8 <= len(raw):
+        length, kind = struct.unpack_from(">I4s", raw, pos)
+        body = raw[pos + 8 : pos + 8 + length]
+        name = kind.decode("ascii") if kind.isalpha() else kind.hex()
+        names.append(name)
+        whole = pos + 12 + length <= len(raw)
+        if whole and zlib.crc32(kind + body) != struct.unpack_from(">I", raw, pos + 8 + length)[0]:
+            bad.append(name)
+        if name == "IHDR" and len(body) >= 13:
+            w, h, depth, color, _, _, interlace = struct.unpack_from(">IIBBBBB", body)
+            size = (w, h)
+            rows += [
+                ("Colour type", PNG_COLOR_TYPES.get(color, str(color))),
+                ("Bit depth", f"{depth} bits per channel"),
+                ("Interlace", "Adam7" if interlace else "None"),
+            ]
+        elif name == "pHYs" and len(body) >= 9:
+            x, y, unit = struct.unpack_from(">IIB", body)
+            rows.append(("Resolution", f"{x * 0.0254:.0f} x {y * 0.0254:.0f} DPI" if unit == 1 else f"{x} x {y} (unit unknown)"))
+        elif name == "tIME" and len(body) >= 7:
+            y, mo, d, h, mi, s = struct.unpack_from(">HBBBBB", body)
+            rows.append(("Last modified (tIME)", f"{y:04d}-{mo:02d}-{d:02d} {h:02d}:{mi:02d}:{s:02d} UTC"))
+        elif name == "gAMA" and len(body) >= 4:
+            rows.append(("Gamma", f"{struct.unpack_from('>I', body)[0] / 100000:g}"))
+        elif name == "sRGB" and body:
+            rows.append(("sRGB rendering intent", ["Perceptual", "Relative colorimetric", "Saturation", "Absolute colorimetric"][body[0] % 4]))
+        elif name == "iCCP":
+            rows.append(("ICC profile", body.split(b"\0", 1)[0].decode("latin-1")))
+        elif name == "acTL" and len(body) >= 8:
+            frames, plays = struct.unpack_from(">II", body)
+            rows.append(("Animation", f"{frames} frames, {'loops forever' if plays == 0 else f'{plays} plays'}"))
+        elif name == "eXIf":
+            exif = body
+        elif name in ("tEXt", "zTXt", "iTXt"):
+            key, _, rest = body.partition(b"\0")
+            key = key.decode("latin-1")
+            if name == "tEXt":
+                value = rest.decode("latin-1")
+            elif name == "zTXt":
+                value = zlib.decompressobj().decompress(rest[1:], 65536).decode("utf-8", "replace")
+            else:
+                flag, rest = rest[0], rest[2:]
+                _, _, rest = rest.partition(b"\0")
+                _, _, rest = rest.partition(b"\0")
+                if flag:
+                    rest = zlib.decompressobj().decompress(rest, 65536)
+                value = rest.decode("utf-8", "replace")
+            if key == "XML:com.adobe.xmp":
+                xmp = value
+            else:
+                text.append((key, value))
+        pos += 12 + length
+        if name == "IEND":
+            end = pos
+        if name == "IEND" or not whole:
+            break
+    rows.append(("Chunks", _run_names(names)))
+    if bad:
+        rows.append(("Chunk CRC errors", f"WARNING: {', '.join(bad)}"))
+    if end is None:
+        rows.append(("Structure", "WARNING: no IEND chunk, so the image is truncated or damaged"))
+    elif end < len(raw):
+        rows.append(("Data after IEND", f"WARNING: {len(raw) - end} bytes of extra data at offset {end}"))
+    groups = [("PNG", rows)]
+    if text:
+        groups.append(("Text chunks", text))
+    return size, groups + _metadata_groups(exif, xmp)
+
+
+def jpeg_info(raw):
+    size, rows, comments, exif, xmp, notes = None, [], [], None, None, []
+    pos = 2
+    while pos + 4 <= len(raw) and raw[pos] == 0xFF:
+        marker = raw[pos + 1]
+        if marker == 0xFF:
+            pos += 1
+            continue
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            pos += 2
+            continue
+        if marker == 0xD9:
+            break
+        length = struct.unpack_from(">H", raw, pos + 2)[0]
+        seg = raw[pos + 4 : pos + 2 + length]
+        if marker in JPEG_SOF and len(seg) >= 6:
+            precision, h, w, count = struct.unpack_from(">BHHB", seg)
+            size = (w, h)
+            rows += [
+                ("Encoding", JPEG_SOF[marker]),
+                ("Precision", f"{precision} bits"),
+                ("Components", f"{count} ({JPEG_COMPONENTS.get(count, 'unknown')})"),
+            ]
+        elif marker == 0xE0 and seg.startswith(b"JFIF\0") and len(seg) >= 12:
+            units, xd, yd = struct.unpack_from(">BHH", seg, 7)
+            unit = {0: "aspect ratio", 1: "DPI", 2: "dots per cm"}.get(units, "unknown unit")
+            rows.append(("JFIF", f"version {seg[5]}.{seg[6]:02d}, density {xd} x {yd} ({unit})"))
+        elif marker == 0xE1 and seg.startswith(b"Exif\0\0"):
+            exif = seg[6:]
+        elif marker == 0xE1 and seg.startswith(b"http://ns.adobe.com/xap/1.0/\0"):
+            xmp = seg[29:].decode("utf-8", "replace")
+        elif marker == 0xE2 and seg.startswith(b"ICC_PROFILE\0"):
+            notes.append("ICC colour profile")
+        elif marker == 0xED and seg.startswith(b"Photoshop 3.0\0"):
+            notes.append("Photoshop / IPTC data")
+        elif marker == 0xEE and seg.startswith(b"Adobe"):
+            notes.append("Adobe segment")
+        elif marker == 0xFE:
+            comments.append(bytes(seg))
+        if marker == 0xDA:
+            break
+        pos += 2 + length
+    eoi = raw.rfind(b"\xff\xd9")
+    if eoi == -1:
+        rows.append(("Structure", "WARNING: no end-of-image marker, so the image is truncated or damaged"))
+    elif eoi + 2 < len(raw):
+        extra = len(raw) - eoi - 2
+        rows.append(
+            (
+                "Data after EOI",
+                f"{'WARNING: ' if extra > 3 else ''}{extra} bytes of extra data at offset {eoi + 2}",
+            )
+        )
+    if notes:
+        rows.append(("Also contains", ", ".join(notes)))
+    groups = [("JPEG", rows)]
+    if comments:
+        groups.append(("Comments", [_comment_row(c) for c in comments]))
+    return size, groups + _metadata_groups(exif, xmp)
+
+
+def gif_info(raw):
+    w, h, flags, background, _ = struct.unpack_from("<HHBBB", raw, 6)
+    pos = 13 + (3 * (2 << (flags & 7)) if flags & 0x80 else 0)
+    frames, comments, loops, end = 0, [], None, None
+    while pos < len(raw):
+        block = raw[pos]
+        if block == 0x3B:
+            end = pos + 1
+            break
+        if block == 0x21 and pos + 2 < len(raw):
+            label, pos, parts = raw[pos + 1], pos + 2, []
+            while pos < len(raw) and raw[pos]:
+                parts.append(raw[pos + 1 : pos + 1 + raw[pos]])
+                pos += 1 + raw[pos]
+            pos += 1
+            if label == 0xFE:
+                comments.append(b"".join(parts))
+            elif label == 0xFF and len(parts) > 1 and parts[0].startswith(b"NETSCAPE") and len(parts[1]) >= 3:
+                loops = struct.unpack_from("<H", parts[1], 1)[0]
+        elif block == 0x2C and pos + 10 < len(raw):
+            frames += 1
+            local = raw[pos + 9]
+            pos += 10 + (3 * (2 << (local & 7)) if local & 0x80 else 0) + 1
+            while pos < len(raw) and raw[pos]:
+                pos += 1 + raw[pos]
+            pos += 1
+        else:
+            break
+    rows = [
+        ("Version", raw[3:6].decode("ascii")),
+        ("Logical screen", f"{w} x {h}"),
+        ("Colour table", f"global, {2 << (flags & 7)} colours" if flags & 0x80 else "none (local tables only)"),
+        ("Frames", str(frames)),
+    ]
+    if loops is not None:
+        rows.append(("Animation loops", "forever" if loops == 0 else str(loops)))
+    if end is None:
+        rows.append(("Structure", "WARNING: no trailer block, so the image is truncated or damaged"))
+    elif end < len(raw):
+        rows.append(("Data after trailer", f"WARNING: {len(raw) - end} bytes of extra data at offset {end}"))
+    groups = [("GIF", rows)]
+    if comments:
+        groups.append(("Comments", [_comment_row(c) for c in comments]))
+    return (w, h), groups
+
+
+def bmp_info(raw):
+    declared, offset = struct.unpack_from("<I4xI", raw, 2)
+    header = struct.unpack_from("<I", raw, 14)[0]
+    if header == 12:
+        w, h, _, bpp = struct.unpack_from("<HHHH", raw, 18)
+        compression, xppm, yppm = None, 0, 0
+    else:
+        w, h, _, bpp, compression, _, xppm, yppm = struct.unpack_from("<iiHHIIii", raw, 18)
+    rows = [
+        ("Header", f"{header} bytes"),
+        ("Bits per pixel", str(bpp)),
+        ("Row order", "bottom-up" if h > 0 else "top-down"),
+    ]
+    if compression is not None:
+        rows.append(("Compression", BMP_COMPRESSION.get(compression, str(compression))))
+    if xppm and yppm:
+        rows.append(("Resolution", f"{xppm * 0.0254:.0f} x {yppm * 0.0254:.0f} DPI"))
+    rows.append(("Pixel data offset", str(offset)))
+    if declared != len(raw):
+        rows.append(("File size field", f"WARNING: declares {declared} bytes but the file is {len(raw)} bytes"))
+    return (w, abs(h)), [("BMP", rows)]
+
+
+def image_references(pkg, part):
+    found = []
+    for name in sorted(pkg.data):
+        if not name.lower().endswith(".rels"):
+            continue
+        folder, _, leaf = name.rpartition("/")
+        base = folder[: -len("_rels")].rstrip("/") if folder.endswith("_rels") else folder
+        source = posixpath.join(base, leaf[: -len(".rels")]) if leaf != ".rels" else ""
+        for tag in _RELATIONSHIP_RE.findall(decode_xml(pkg.data[name])[0]):
+            attrs = dict(_ATTRIBUTE_RE.findall(tag))
+            target = attrs.get("Target", "")
+            if not target or attrs.get("TargetMode") == "External":
+                continue
+            target = target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join(base, target))
+            if target.lower() == part.lower():
+                found.append(f"{source or '(package root)'} ({attrs.get('Id', '?')})")
+    return found
+
+
+def image_metadata(pkg, part, raw, decoded_size=None):
+    kind = sniff_image(raw)
+    ext = os.path.splitext(part)[1].lower()
+    expected = IMAGE_FORMATS.get(ext)
+    general = [
+        ("Part", part),
+        ("File size", f"{len(raw):,} bytes ({human_size(len(raw))})"),
+        ("Format", f"{kind} (from the file content)" if kind else "Not recognised as an image"),
+    ]
+    if kind and expected and kind != expected:
+        general.append(("Extension", f"WARNING: {ext} should be {expected}, but the content is {kind}"))
+    elif kind:
+        general.append(("Extension", f"{ext} (matches the content)"))
+    else:
+        general.append(("Extension", f"WARNING: {ext} but the content is not a known image format"))
+    groups, size = [], None
+    parsers = {"PNG": png_info, "JPEG": jpeg_info, "GIF": gif_info, "BMP": bmp_info}
+    if kind in parsers:
+        try:
+            size, groups = parsers[kind](raw)
+        except (struct.error, ValueError, IndexError, zlib.error) as e:
+            groups = [(kind, [("Could not read the header", f"{type(e).__name__}: {e}")])]
+    if size is None and decoded_size is not None and not decoded_size.isEmpty():
+        size = (decoded_size.width(), decoded_size.height())
+    if size:
+        general.append(("Dimensions", f"{size[0]} x {size[1]} pixels"))
+    for label, algo in (("MD5", hashlib.md5), ("SHA-1", hashlib.sha1), ("SHA-256", hashlib.sha256)):
+        general.append((label, algo(raw).hexdigest()))
+    refs = image_references(pkg, part)
+    general += [("Referenced by", r) for r in refs] or [
+        ("Referenced by", "WARNING: no relationship points at this image (orphaned)")
+    ]
+    if part in pkg.recovered:
+        problem = pkg.recovered[part]
+        general.append(
+            ("Recovery", f"WARNING: UNVERIFIED, recovered but failed its integrity check ({problem})")
+            if problem
+            else ("Recovery", "Recovered from damaged zip headers and verified against its CRC32/size")
+        )
+    return kind, [("General", general)] + groups
+
+
 def part_text(raw):
     if raw is None:
         return ""
     return pretty_xml(decode_xml(raw)[0])[0]
 
 
+@functools.lru_cache(maxsize=16)
+def formatted_lines(raw):
+    return tuple(part_text(raw).splitlines())
+
+
+def compile_query(query, case=False, whole=False, regex=False):
+    pattern = query if regex else re.escape(query)
+    if whole:
+        pattern = rf"(?<!\w)(?:{pattern})(?!\w)"
+    return re.compile(pattern, 0 if case else re.IGNORECASE)
+
+
+def _snippet(text, start, end):
+    """HTML for a match with some context; the match is highlighted."""
+
+    def flat(s):
+        return html.escape(re.sub(r"\s+", " ", s))
+
+    a, b = max(start - SNIPPET_CONTEXT, 0), min(end + SNIPPET_CONTEXT, len(text))
+    return (
+        ("..." if a else "")
+        + flat(text[a:start].lstrip())
+        + f'<span style="background-color:#ffd24d; color:#000000">{flat(text[start:end])}</span>'
+        + flat(text[end:b])
+        + ("..." if b < len(text) else "")
+    )
+
+
+def search_part(raw, rx, text_only=False, limit=SEARCH_MAX_HITS):
+    """Matches as (line, column, length, html) on the formatted XML lines."""
+    lines = formatted_lines(raw)
+    hits = []
+    if not text_only:
+        for n, line in enumerate(lines, 1):
+            for m in rx.finditer(line):
+                if m.end() > m.start():
+                    hits.append(
+                        (n, m.start(), m.end() - m.start(), _snippet(line, m.start(), m.end()))
+                    )
+                    if len(hits) >= limit:
+                        return hits
+        return hits
+
+    # text only: join the character data so words split across runs still match
+    pieces, segs, starts, pos = [], [], [], 0
+
+    def add(text, line, col, raw_len, exact):
+        nonlocal pos
+        starts.append(pos)
+        segs.append((line, col, raw_len, len(text), exact))
+        pieces.append(text)
+        pos += len(text)
+
+    # parts without paragraphs (properties, comments lists) keep each element apart
+    paragraphs = any(_PARA_END_RE.search(line) for line in lines)
+    for n, line in enumerate(lines, 1):
+        found = False
+        for m in _TEXT_RE.finditer(line):
+            if m.group(1):
+                found = True
+                text = html.unescape(m.group(1))
+                add(text, n, m.start(1), len(m.group(1)), len(text) == len(m.group(1)))
+                if not paragraphs:
+                    add("\n", n, 0, 0, True)
+        if not found and "<" not in line and ">" not in line and line.strip():
+            text = html.unescape(line.strip())
+            add(text, n, len(line) - len(line.lstrip()), len(line.strip()), text == line.strip())
+            if not paragraphs:
+                add("\n", n, 0, 0, True)
+        if _BREAK_RE.search(line):
+            add(" ", n, 0, 0, True)
+        if _PARA_END_RE.search(line):
+            add("\n", n, 0, 0, True)
+    stream = "".join(pieces)
+    for m in rx.finditer(stream):
+        if m.end() == m.start():
+            continue
+        i = bisect.bisect_right(starts, m.start()) - 1
+        line, col, raw_len, text_len, exact = segs[i]
+        offset = m.start() - starts[i]
+        if exact:
+            col, length = col + offset, min(m.end() - m.start(), text_len - offset)
+        else:
+            length = raw_len
+        hits.append((line, col, max(length, 0), _snippet(stream, m.start(), m.end())))
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def search_documents(jobs, rx, text_only, limit=SEARCH_MAX_HITS):
+    """jobs: one [(part name, raw bytes)] list per document; returns (hits, truncated)."""
+    out = []
+    for doc, parts in enumerate(jobs):
+        for name, raw in parts:
+            room = limit - len(out)
+            if room <= 0:
+                return out, True
+            for line, col, length, snippet in search_part(raw, rx, text_only, room + 1):
+                if len(out) >= limit:
+                    return out, True
+                out.append((doc, name, line, col, length, snippet))
+    return out, False
+
+
 def build_diff(left, right):
-    a = part_text(left).splitlines()
-    b = part_text(right).splitlines()
+    a = formatted_lines(left)
+    b = formatted_lines(right)
     res = {
         "ltext": [],
         "rtext": [],
@@ -709,700 +1096,6 @@ def build_diff(left, right):
         else:
             res["changed"] += n
     return res
-
-
-def is_dark_theme():
-    return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
-
-
-class XmlHighlighter(QSyntaxHighlighter):
-    def __init__(self, document):
-        super().__init__(document)
-        dark = is_dark_theme()
-
-        def fmt(color, bold=False):
-            f = QTextCharFormat()
-            f.setForeground(QColor(color))
-            if bold:
-                f.setFontWeight(QFont.Weight.Bold)
-            return f
-
-        tag = fmt("#569cd6" if dark else "#1c4fa0")
-        attr = fmt("#9cdcfe" if dark else "#7a3e9d")
-        string = fmt("#ce9178" if dark else "#a31515")
-        entity = fmt("#d7ba7d" if dark else "#a05a00")
-        comment = fmt("#6a9955" if dark else "#2e7d32")
-        self._rules = [
-            (re.compile(r"</?[\w:.-]+|/?>"), tag),
-            (re.compile(r"[\w:.-]+(?=\s*=)"), attr),
-            (re.compile(r"&[\w#]+;"), entity),
-            (re.compile(r"\"[^\"]*\"|'[^']*'"), string),
-            (re.compile(r"<!--.*?-->|<\?.*?\?>"), comment),
-        ]
-
-    def highlightBlock(self, text):
-        for rx, f in self._rules:
-            for m in rx.finditer(text):
-                self.setFormat(m.start(), m.end() - m.start(), f)
-
-
-class _Gutter(QWidget):
-    def __init__(self, editor):
-        super().__init__(editor)
-        self._editor = editor
-
-    def sizeHint(self):
-        return QSize(self._editor.gutter_width(), 0)
-
-    def paintEvent(self, event):
-        self._editor.paint_gutter(event)
-
-
-class CodeEditor(QPlainTextEdit):
-
-    def __init__(self, parent=None, read_only=False):
-        super().__init__(parent)
-        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self.setReadOnly(read_only)
-        self._labels = None
-        self._gutter = _Gutter(self)
-        self._highlighter = XmlHighlighter(self.document())
-        self.blockCountChanged.connect(self._update_gutter_width)
-        self.updateRequest.connect(self._update_gutter)
-        self._update_gutter_width()
-
-    def set_line_labels(self, labels):
-        self._labels = labels
-        self._update_gutter_width()
-        self._gutter.update()
-
-    def gutter_width(self):
-        if self._labels is not None:
-            digits = max((len(s) for s in self._labels), default=1)
-        else:
-            digits = len(str(max(1, self.blockCount())))
-        return 12 + self.fontMetrics().horizontalAdvance("9") * max(digits, 2)
-
-    def _update_gutter_width(self, *_):
-        self.setViewportMargins(self.gutter_width(), 0, 0, 0)
-
-    def _update_gutter(self, rect, dy):
-        if dy:
-            self._gutter.scroll(0, dy)
-        else:
-            self._gutter.update(0, rect.y(), self._gutter.width(), rect.height())
-        if rect.contains(self.viewport().rect()):
-            self._update_gutter_width()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        cr = self.contentsRect()
-        self._gutter.setGeometry(
-            QRect(cr.left(), cr.top(), self.gutter_width(), cr.height())
-        )
-
-    def paint_gutter(self, event):
-        painter = QPainter(self._gutter)
-        painter.fillRect(event.rect(), self.palette().color(QPalette.ColorRole.Window))
-        painter.setPen(self.palette().color(QPalette.ColorRole.PlaceholderText))
-        block = self.firstVisibleBlock()
-        n = block.blockNumber()
-        top = round(
-            self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
-        )
-        bottom = top + round(self.blockBoundingRect(block).height())
-        height = self.fontMetrics().height()
-        while block.isValid() and top <= event.rect().bottom():
-            if block.isVisible() and bottom >= event.rect().top():
-                if self._labels is None:
-                    label = str(n + 1)
-                else:
-                    label = self._labels[n] if n < len(self._labels) else ""
-                painter.drawText(
-                    0,
-                    top,
-                    self._gutter.width() - 6,
-                    height,
-                    Qt.AlignmentFlag.AlignRight,
-                    label,
-                )
-            block = block.next()
-            top = bottom
-            bottom = top + round(self.blockBoundingRect(block).height())
-            n += 1
-
-    def goto(self, line, column=1):
-        block = self.document().findBlockByNumber(max(line - 1, 0))
-        cursor = QTextCursor(block)
-        cursor.movePosition(
-            QTextCursor.MoveOperation.Right,
-            QTextCursor.MoveMode.MoveAnchor,
-            min(max(column - 1, 0), block.length() - 1),
-        )
-        self.setTextCursor(cursor)
-        self.centerCursor()
-        self.setFocus()
-
-
-class Worker(QThread):
-
-    done = pyqtSignal(int, object)
-
-    def __init__(self, token, fn, *args):
-        super().__init__()
-        self._token, self._fn, self._args = token, fn, args
-
-    def run(self):
-        try:
-            result = self._fn(*self._args)
-        except Exception as e:
-            result = e
-        self.done.emit(self._token, result)
-
-
-def tint(r, g, b, a=70):
-    return QColor(r, g, b, a)
-
-
-KIND_COLORS = {
-    "del": tint(220, 60, 60),
-    "add": tint(50, 170, 80),
-    "chg": tint(225, 170, 30, 80),
-    "pad": tint(128, 128, 128, 35),
-}
-STATUS = {
-    "same": ("Identical", tint(50, 170, 80, 45)),
-    "diff": ("Different", tint(220, 60, 60, 55)),
-    "left": ("Only in left", tint(60, 120, 220, 55)),
-    "right": ("Only in right", tint(60, 120, 220, 55)),
-}
-
-
-class DiffView(QWidget):
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._starts = []
-        self._cursor = -1
-
-        self.left_title, self.right_title = QLabel(), QLabel()
-        for title in (self.left_title, self.right_title):
-            title.setStyleSheet("font-weight: bold; padding: 2px 4px;")
-        self.left = CodeEditor(read_only=True)
-        self.right = CodeEditor(read_only=True)
-        self.summary = QLabel()
-        self.summary.setStyleSheet("padding: 2px 4px;")
-
-        def column(title, editor):
-            box = QWidget()
-            lay = QVBoxLayout(box)
-            lay.setContentsMargins(0, 0, 0, 0)
-            lay.setSpacing(0)
-            lay.addWidget(title)
-            lay.addWidget(editor)
-            return box
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(column(self.left_title, self.left))
-        splitter.addWidget(column(self.right_title, self.right))
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.summary)
-        layout.addWidget(splitter, 1)
-
-        for a, b in ((self.left, self.right), (self.right, self.left)):
-            a.verticalScrollBar().valueChanged.connect(b.verticalScrollBar().setValue)
-            a.horizontalScrollBar().valueChanged.connect(
-                b.horizontalScrollBar().setValue
-            )
-
-    def show_message(self, text, left_title="", right_title=""):
-        self._starts, self._cursor = [], -1
-        self.left_title.setText(left_title)
-        self.right_title.setText(right_title)
-        for editor in (self.left, self.right):
-            editor.set_line_labels(None)
-            editor.setPlainText("")
-        self.summary.setText(text)
-
-    def show_result(self, res, left_title, right_title):
-        self._starts, self._cursor = res["starts"], -1
-        self.left_title.setText(left_title)
-        self.right_title.setText(right_title)
-        for editor, side in ((self.left, "l"), (self.right, "r")):
-            editor.setPlainText("\n".join(res[side + "text"]))
-            editor.set_line_labels(res[side + "label"])
-            self._paint(editor, res[side + "kind"])
-            editor.moveCursor(QTextCursor.MoveOperation.Start)
-        if self._starts:
-            self.summary.setText(
-                f"{len(self._starts)} difference blocks: {res['added']} lines added, "
-                f"{res['removed']} removed, {res['changed']} changed"
-            )
-            self.step(True)
-        else:
-            self.summary.setText("The parts are identical once formatted.")
-
-    @staticmethod
-    def _paint(editor, kinds):
-        doc = editor.document()
-        cursor = QTextCursor(doc)
-        cursor.beginEditBlock()
-        block = doc.begin()
-        for kind in kinds:
-            if not block.isValid():
-                break
-            if kind != "equal":
-                cursor.setPosition(block.position())
-                bf = QTextBlockFormat()
-                bf.setBackground(QBrush(KIND_COLORS[kind]))
-                cursor.setBlockFormat(bf)
-            block = block.next()
-        cursor.endEditBlock()
-
-    def step(self, forward):
-        if not self._starts:
-            return
-        self._cursor = (self._cursor + (1 if forward else -1)) % len(self._starts)
-        row = self._starts[self._cursor]
-        for editor in (self.left, self.right):
-            cursor = QTextCursor(editor.document().findBlockByNumber(row))
-            editor.setTextCursor(cursor)
-            editor.centerCursor()
-
-
-class ViewerTab(QWidget):
-    changed = pyqtSignal()
-    message = pyqtSignal(str)
-
-    PAGE_EMPTY, PAGE_EDITOR, PAGE_IMAGE, PAGE_INFO = range(4)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.pkg = None
-        self._part = None
-        self._enc = "utf-8"
-        self._error = None
-        self._suppress = False
-
-        self.filter = QLineEdit()
-        self.filter.setPlaceholderText("Filter parts...")
-        self.filter.setClearButtonEnabled(True)
-        self.filter.textChanged.connect(self._apply_filter)
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Part", "Size"])
-        self.tree.header().setStretchLastSection(False)
-        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.tree.currentItemChanged.connect(self._on_current_changed)
-
-        left = QWidget()
-        lay = QVBoxLayout(left)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.addWidget(self.filter)
-        lay.addWidget(self.tree)
-
-        self.part_label = QLabel("Open a document to see its parts")
-        self.part_label.setStyleSheet("font-weight: bold;")
-        self.change_label = QLabel()
-        self.banner = QLabel()
-        self.banner.setTextFormat(Qt.TextFormat.RichText)
-        self.banner.setStyleSheet(
-            "background: #fff4c2; color: #5a4300; padding: 4px 8px; border: 1px solid #e0c870;"
-        )
-        self.banner.linkActivated.connect(self._goto_error)
-        self.banner.hide()
-
-        self.editor = CodeEditor(read_only=True)
-        self.editor.document().modificationChanged.connect(
-            self._on_modification_changed
-        )
-        self.edit_btn = QPushButton("Edit")
-        self.edit_btn.setCheckable(True)
-        self.edit_btn.setToolTip("Allow the content of this part to be edited")
-        self.edit_btn.clicked.connect(self._toggle_edit)
-        self.save_btn = QPushButton("Save Part")
-        self.save_btn.setToolTip("Keep the edited content of this part in the package")
-        self.save_btn.clicked.connect(lambda: self.save_part())
-        self.edit_btn.setEnabled(False)
-        self.save_btn.hide()
-        self.editor.textChanged.connect(lambda: self._validate_timer.start())
-        self._validate_timer = QTimer(self, singleShot=True, interval=600)
-        self._validate_timer.timeout.connect(self._validate)
-
-        self.empty = QLabel("Select a part to view its content")
-        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image = QLabel()
-        self.image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        scroll = QScrollArea()
-        scroll.setWidget(self.image)
-        scroll.setWidgetResizable(True)
-        self.info = QPlainTextEdit()
-        self.info.setReadOnly(True)
-        self.info.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.stack = QStackedWidget()
-        for page in (self.empty, self.editor, scroll, self.info):
-            self.stack.addWidget(page)
-
-        right = QWidget()
-        rlay = QVBoxLayout(right)
-        rlay.setContentsMargins(0, 0, 0, 0)
-        head = QHBoxLayout()
-        head.addWidget(self.part_label, 1)
-        head.addWidget(self.change_label)
-        head.addWidget(self.save_btn)
-        head.addWidget(self.edit_btn)
-        rlay.addLayout(head)
-        rlay.addWidget(self.banner)
-        rlay.addWidget(self.stack, 1)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(left)
-        splitter.addWidget(right)
-        splitter.setSizes([280, 760])
-        outer = QHBoxLayout(self)
-        outer.addWidget(splitter)
-
-    def load(self, pkg):
-        self.pkg, self._part = pkg, None
-        self.stack.setCurrentIndex(self.PAGE_EMPTY)
-        self.banner.hide()
-        self.change_label.clear()
-        self.part_label.setText("Select a part to view its content")
-        self.filter.clear()
-        self.editor.setReadOnly(True)
-        self._populate()
-        self._update_buttons()
-        self.changed.emit()
-
-    def unload(self):
-        self.pkg, self._part, self._error = None, None, None
-        self.stack.setCurrentIndex(self.PAGE_EMPTY)
-        self.tree.clear()
-        self.filter.clear()
-        self.banner.hide()
-        self.change_label.clear()
-        self.part_label.setText("Open a document to see its parts")
-        self.editor.setReadOnly(True)
-        self.editor.setPlainText("")
-        self.editor.document().setModified(False)
-        self.info.setPlainText("")
-        self.image.clear()
-        self._update_buttons()
-        self.changed.emit()
-
-    def _populate(self):
-        self._suppress = True
-        self.tree.clear()
-        style = self.style()
-        folder_icon = style.standardIcon(QStyle.StandardPixmap.SP_DirIcon)
-        file_icon = style.standardIcon(QStyle.StandardPixmap.SP_FileIcon)
-        folders = {}
-        for name in sorted(self.pkg.data, key=str.lower):
-            parts = name.split("/")
-            parent = self.tree.invisibleRootItem()
-            for i, piece in enumerate(parts[:-1]):
-                key = "/".join(parts[: i + 1])
-                if key not in folders:
-                    item = QTreeWidgetItem(parent, [piece])
-                    item.setIcon(0, folder_icon)
-                    folders[key] = item
-                parent = folders[key]
-            item = QTreeWidgetItem(
-                parent, [self._label(name), human_size(len(self.pkg.data[name]))]
-            )
-            if name in self.pkg.recovered:
-                item.setToolTip(0, self._recovery_text(name))
-            item.setIcon(0, file_icon)
-            item.setData(0, PATH_ROLE, name)
-            item.setTextAlignment(1, Qt.AlignmentFlag.AlignRight)
-        self.tree.expandAll()
-        self.tree.resizeColumnToContents(1)
-        self._suppress = False
-
-    def _file_items(self):
-        stack = [self.tree.invisibleRootItem()]
-        while stack:
-            node = stack.pop()
-            for i in range(node.childCount()):
-                child = node.child(i)
-                stack.append(child)
-                if child.data(0, PATH_ROLE):
-                    yield child
-
-    def _item_for(self, part):
-        return next(
-            (i for i in self._file_items() if i.data(0, PATH_ROLE) == part), None
-        )
-
-    def _apply_filter(self, text):
-        needle = text.lower().strip()
-
-        def visit(node):
-            visible = False
-            for i in range(node.childCount()):
-                child = node.child(i)
-                path = child.data(0, PATH_ROLE)
-                show = (needle in path.lower()) if path else visit(child)
-                child.setHidden(not show)
-                visible = visible or show
-            return visible
-
-        visit(self.tree.invisibleRootItem())
-
-    def _label(self, part):
-        name = part.rsplit("/", 1)[-1]
-        if self.pkg.recovered.get(part):
-            name += " (unverified)"
-        return name + (" *" if part in self.pkg.modified else "")
-
-    def _recovery_text(self, part):
-        problem = self.pkg.recovered[part]
-        if problem:
-            return (
-                f"UNVERIFIED: recovered from the raw file but failed its integrity "
-                f"check ({problem}). The content decoded completely but may be "
-                f"inaccurate."
-            )
-        return (
-            "Recovered from the raw file after its zip headers failed to read; "
-            "verified against its recorded CRC32/size."
-        )
-
-    def _show_recovery_note(self):
-        if self._part in self.pkg.recovered and self.pkg.recovered[self._part]:
-            self.banner.setText(self._recovery_text(self._part))
-            self.banner.show()
-        else:
-            self.banner.hide()
-
-    def _mark_item(self, part):
-        item = self._item_for(part)
-        if item:
-            edited = part in self.pkg.modified
-            item.setText(0, self._label(part))
-            font = item.font(0)
-            font.setBold(edited)
-            item.setFont(0, font)
-
-    def _editor_dirty(self):
-        return (
-            self._part is not None
-            and self.stack.currentIndex() == self.PAGE_EDITOR
-            and self.editor.document().isModified()
-        )
-
-    def _update_buttons(self):
-        on_editor = (
-            self._part is not None and self.stack.currentIndex() == self.PAGE_EDITOR
-        )
-        self.edit_btn.setEnabled(on_editor)
-        self.edit_btn.setChecked(on_editor and not self.editor.isReadOnly())
-        self.save_btn.setVisible(self._editor_dirty())
-
-    def _toggle_edit(self, checked):
-        if checked:
-            self.editor.setReadOnly(False)
-            self.editor.setFocus()
-        elif self._editor_dirty():
-            if self._resolve_dirty_editor():
-                self._show_part(self._part)
-            else:
-                self.edit_btn.setChecked(True)
-                return
-        else:
-            self.editor.setReadOnly(True)
-        self._update_buttons()
-
-    def _on_current_changed(self, cur, prev):
-        if self._suppress or not self.pkg:
-            return
-        part = cur.data(0, PATH_ROLE) if cur else None
-        if part == self._part:
-            return
-        if self._editor_dirty() and not self._resolve_dirty_editor():
-            self._suppress = True
-            self.tree.setCurrentItem(prev)
-            self._suppress = False
-            return
-        if part:
-            self._show_part(part)
-
-    def _resolve_dirty_editor(self):
-        box = QMessageBox(
-            QMessageBox.Icon.Question,
-            "Unsaved changes",
-            f"Save changes to {self._part.rsplit('/', 1)[-1]}?",
-            QMessageBox.StandardButton.Save
-            | QMessageBox.StandardButton.Discard
-            | QMessageBox.StandardButton.Cancel,
-            self,
-        )
-        choice = box.exec()
-        if choice == QMessageBox.StandardButton.Save:
-            return self.save_part()
-        return choice == QMessageBox.StandardButton.Discard
-
-    def _show_part(self, part):
-        self._part = part
-        raw = self.pkg.data[part]
-        self.part_label.setText(part)
-        self.change_label.setText("Edited" if part in self.pkg.modified else "")
-        self.banner.hide()
-        self.editor.setReadOnly(True)
-        if is_xml_part(part):
-            text, self._enc = decode_xml(raw)
-            shown, ok = pretty_xml(text)
-            self.editor.setPlainText(shown)
-            self.editor.document().setModified(False)
-            self.editor.moveCursor(QTextCursor.MoveOperation.Start)
-            self.stack.setCurrentIndex(self.PAGE_EDITOR)
-            self._validate()
-        elif is_image_part(part) and self._show_image(raw):
-            pass
-        else:
-            self.info.setPlainText(
-                f"Cannot display the content of {part}\n"
-                f"{len(raw)} bytes, sha256 {hashlib.sha256(raw).hexdigest()}\n\n"
-                + hex_dump(raw)
-            )
-            self.stack.setCurrentIndex(self.PAGE_INFO)
-        if not is_xml_part(part):
-            self._show_recovery_note()
-        self._update_buttons()
-        self.changed.emit()
-
-    def _show_image(self, raw):
-        pixmap = QPixmap()
-        if not pixmap.loadFromData(raw):
-            return False
-        self.image.setPixmap(pixmap)
-        self.stack.setCurrentIndex(self.PAGE_IMAGE)
-        return True
-
-    def _validate(self):
-        if self.stack.currentIndex() != self.PAGE_EDITOR:
-            return
-        err = validate_xml(self.editor.toPlainText())
-        if err:
-            line, col, msg = err
-            self._error = err
-            self.banner.setText(
-                f"XML error on line {line} at column {col}: {msg} "
-                f"&nbsp;<a href='goto'>Go to error</a>"
-            )
-            self.banner.show()
-        else:
-            self._error = None
-            self._show_recovery_note()
-
-    def _goto_error(self, _link):
-        if self._error:
-            self.editor.goto(self._error[0], self._error[1])
-
-    def _on_modification_changed(self, modified):
-        if self.stack.currentIndex() == self.PAGE_EDITOR:
-            self.change_label.setText(
-                "Unsaved changes*"
-                if modified
-                else ("Saved" if self._part in self.pkg.modified else "")
-            )
-        self._update_buttons()
-        self.changed.emit()
-
-    def save_part(self):
-        if not self._editor_dirty():
-            return True
-        text = self.editor.toPlainText()
-        err = validate_xml(text)
-        if err:
-            line, col, msg = err
-            box = QMessageBox(
-                QMessageBox.Icon.Warning,
-                "XML error",
-                f"Error on line {line} at column {col}: {msg}",
-                parent=self,
-            )
-            save_anyway = box.addButton(
-                "Save Anyway", QMessageBox.ButtonRole.DestructiveRole
-            )
-            goto = box.addButton("Go to Error", QMessageBox.ButtonRole.ActionRole)
-            box.addButton(QMessageBox.StandardButton.Cancel)
-            box.exec()
-            if box.clickedButton() is goto:
-                self.editor.goto(line, col)
-                return False
-            if box.clickedButton() is not save_anyway:
-                return False
-        self.pkg.set_data(self._part, encode_xml(compact_xml(text), self._enc))
-        self.editor.document().setModified(False)
-        self._mark_item(self._part)
-        self.message.emit(f"Saved {self._part} (not yet written to a file)")
-        self.changed.emit()
-        return True
-
-    def extract_part(self):
-        if not (self.pkg and self._part):
-            return
-        default = os.path.join(
-            os.path.dirname(self.pkg.path), self._part.rsplit("/", 1)[-1]
-        )
-        dest, _ = QFileDialog.getSaveFileName(self, "Extract part", default)
-        if dest:
-            dest = os.path.normpath(dest)
-            with open(dest, "wb") as fh:
-                fh.write(self.pkg.data[self._part])
-            self.message.emit(f"Extracted {self._part} to {dest}")
-
-    def save_package_as(self):
-        if not self.pkg:
-            return False
-        if self._editor_dirty() and not self.save_part():
-            return False
-        stem, ext = os.path.splitext(self.pkg.path)
-        dest, _ = QFileDialog.getSaveFileName(
-            self, "Save package as", f"{stem}_edited{ext}", OPEN_FILTER
-        )
-        if not dest:
-            return False
-        dest = os.path.normpath(dest)
-        try:
-            self.pkg.save(dest)
-        except OSError as e:
-            QMessageBox.critical(self, APP_NAME, f"Could not write the file:\n{e}")
-            return False
-        for item in self._file_items():
-            self._mark_item(item.data(0, PATH_ROLE))
-        self.change_label.clear()
-        self.message.emit(f"Wrote {dest}")
-        self.changed.emit()
-        return True
-
-    def can_discard(self):
-        if not self.pkg:
-            return True
-        if self._editor_dirty() and not self._resolve_dirty_editor():
-            return False
-        if self.pkg.modified:
-            box = QMessageBox(
-                QMessageBox.Icon.Question,
-                "Unsaved package",
-                "Edited parts have not been written to a file.",
-                parent=self,
-            )
-            save = box.addButton(
-                "Save Package As...", QMessageBox.ButtonRole.AcceptRole
-            )
-            discard = box.addButton("Discard", QMessageBox.ButtonRole.DestructiveRole)
-            box.addButton(QMessageBox.StandardButton.Cancel)
-            box.exec()
-            if box.clickedButton() is save:
-                return self.save_package_as()
-            return box.clickedButton() is discard
-        return True
-
-    def is_dirty(self):
-        return bool(self.pkg) and (self._editor_dirty() or bool(self.pkg.modified))
 
 
 def _esc(text, lead=True):
@@ -1558,7 +1251,7 @@ def report_part_diffs(rows, step=None):
 
 
 def build_report_html(left, right, rows, diffs, mono):
-    counts = {k: 0 for k in STATUS}
+    counts = {"same": 0, "diff": 0, "left": 0, "right": 0}
     for r in rows:
         counts[r[3]] += 1
     facts = [_file_facts(left), _file_facts(right)]
@@ -1646,7 +1339,7 @@ def build_report_html(left, right, rows, diffs, mono):
             f"<div style=\"font-family:'{mono}'; font-size:7pt\">"
         )
         for name, a, b, status in shown:
-            limit = REPORT_ONE_SIDED_ROWS if status != "diff" else REPORT_MAX_ROWS
+            limit = 40 if status != "diff" else REPORT_MAX_ROWS
             out.append(
                 _diff_table(
                     name,
@@ -1661,680 +1354,14 @@ def build_report_html(left, right, rows, diffs, mono):
     return "".join(out) + "</body>"
 
 
-def write_report_pdf(path, left, right, rows, step=None):
-    diffs = report_part_diffs(rows, step)
-    if diffs is None:
-        return False
-    mono = "Consolas"
-    if mono not in QFontDatabase.families():
-        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont).family()
-    body = build_report_html(left, right, rows, diffs, mono)
-
-    writer = QPdfWriter(path)
-    writer.setTitle(f"{left.name} vs {right.name}")
-    writer.setCreator(f"{APP_NAME} v{VERSION}")
-    writer.setResolution(REPORT_DPI)
-    writer.setPageLayout(
-        QPageLayout(
-            QPageSize(QPageSize.PageSizeId.Letter),
-            QPageLayout.Orientation.Landscape,
-            QMarginsF(36, 36, 36, 36),
-            QPageLayout.Unit.Point,
-        )
-    )
-    footer = round(REPORT_DPI * 0.3)
-    width, page_h = writer.width(), writer.height() - footer
-
-    doc = QTextDocument()
-    doc.documentLayout().setPaintDevice(writer)
-    doc.setDefaultFont(
-        QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
-    )
-    font = doc.defaultFont()
-    font.setPointSize(9)
-    doc.setDefaultFont(font)
-    option = QTextOption()
-    option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
-    doc.setDefaultTextOption(option)
-    doc.setPageSize(QSizeF(width, page_h))
-    doc.setHtml(body)
-
-    painter = QPainter()
-    if not painter.begin(writer):
-        raise OSError(f"Cannot write to {path}")
-    try:
-        palette = QPalette()
-        palette.setColor(QPalette.ColorRole.Text, QColor("black"))
-        small = QFont(font)
-        small.setPointSize(8)
-        pages = doc.pageCount()
-        for n in range(pages):
-            if n:
-                writer.newPage()
-            painter.save()
-            painter.setClipRect(QRectF(0, 0, width, page_h))
-            painter.translate(0, -n * page_h)
-            ctx = QAbstractTextDocumentLayout.PaintContext()
-            ctx.palette = palette
-            ctx.clip = QRectF(0, n * page_h, width, page_h)
-            doc.documentLayout().draw(painter, ctx)
-            painter.restore()
-            painter.setFont(small)
-            painter.setPen(QColor("#666666"))
-            area = QRectF(0, page_h, width, footer)
-            align = Qt.AlignmentFlag.AlignVCenter
-            painter.drawText(
-                area,
-                align | Qt.AlignmentFlag.AlignLeft,
-                f"{APP_NAME} v{VERSION}   {left.name}  vs  {right.name}",
-            )
-            painter.drawText(
-                area, align | Qt.AlignmentFlag.AlignRight, f"Page {n + 1} of {pages}"
-            )
-    finally:
-        painter.end()
-    return True
-
-
-
-class CompareTab(QWidget):
-    message = pyqtSignal(str)
-    swapped = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.left_pkg = self.right_pkg = None
-        self._rows = []
-        self._token = 0
-        self._workers = set()
-
-        self.header = QLabel("Use File > Compare Documents... to choose two documents.")
-        self.swap = QPushButton("Swap sides")
-        self.swap.clicked.connect(self.swap_sides)
-        self.export_btn = QPushButton("Export PDF...")
-        self.export_btn.setEnabled(False)
-        self.export_btn.clicked.connect(self.export_report)
-        self.only_diffs = QCheckBox("Differences only")
-        self.only_diffs.toggled.connect(self._rebuild)
-        prev_btn, next_btn = QPushButton("Previous difference"), QPushButton(
-            "Next difference"
-        )
-        prev_btn.clicked.connect(lambda: self.diff.step(False))
-        next_btn.clicked.connect(lambda: self.diff.step(True))
-        prev_btn.setShortcut(QKeySequence("Shift+F3"))
-        next_btn.setShortcut(QKeySequence("F3"))
-
-        bar = QHBoxLayout()
-        bar.addWidget(self.header, 1)
-        bar.addWidget(self.only_diffs)
-        bar.addWidget(self.swap)
-        bar.addWidget(self.export_btn)
-        bar.addWidget(prev_btn)
-        bar.addWidget(next_btn)
-
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Status", "Part", "Left", "Right"])
-        self.tree.setRootIsDecorated(False)
-        self.tree.currentItemChanged.connect(self._on_current_changed)
-        self.diff = DiffView()
-        self.diff.show_message("Select a part to see how it differs.")
-
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(self.tree)
-        splitter.addWidget(self.diff)
-        splitter.setSizes([260, 460])
-        layout = QVBoxLayout(self)
-        layout.addLayout(bar)
-        layout.addWidget(splitter, 1)
-
-    def clear(self):
-        self._token += 1
-        self.left_pkg = self.right_pkg = None
-        self._rows = []
-        self.tree.clear()
-        self.header.setText("Use File > Compare Documents... to choose two documents.")
-        self.diff.show_message("Select a part to see how it differs.")
-
-    def export_report(self):
-        if not self.left_pkg:
-            return
-        stem = lambda p: os.path.splitext(p.name)[0]
-        default = os.path.join(
-            os.path.dirname(self.left_pkg.path),
-            f"{stem(self.left_pkg)} vs {stem(self.right_pkg)}.pdf",
-        )
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export comparison report", default, "PDF files (*.pdf)"
-        )
-        if not path:
-            return
-        path = os.path.normpath(path if path.lower().endswith(".pdf") else path + ".pdf")
-        progress = QProgressDialog("Building the report...", "Cancel", 0, 100, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(500)
-
-        def step(i, n, name):
-            progress.setValue(int(90 * i / max(n, 1)))
-            progress.setLabelText(f"Comparing {name}")
-            QApplication.processEvents()
-            return progress.wasCanceled()
-
-        try:
-            done = write_report_pdf(
-                path, self.left_pkg, self.right_pkg, self._rows, step
-            )
-        except OSError as e:
-            progress.close()
-            QMessageBox.critical(
-                self, "Could not write the report", f"{path}\n\n{e}"
-            )
-            return
-        progress.close()
-        if not done:
-            return
-        self.message.emit(f"Report written to {path}")
-        box = QMessageBox(
-            QMessageBox.Icon.Question,
-            "Report exported",
-            f"The report was written to:\n{path}\n\nOpen it now?",
-            QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Close,
-            self,
-        )
-        box.setDefaultButton(QMessageBox.StandardButton.Open)
-        if (
-            box.exec() == QMessageBox.StandardButton.Open
-            and not QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-        ):
-            QMessageBox.warning(
-                self, "Could not open the report", f"No application found to open:\n{path}"
-            )
-
-    def set_packages(self, left, right):
-        self.left_pkg, self.right_pkg = left, right
-        self.export_btn.setEnabled(True)
-        names = sorted(set(left.data) | set(right.data), key=str.lower)
-        self._rows = []
-        for name in names:
-            a, b = left.data.get(name), right.data.get(name)
-            if a is None:
-                status = "right"
-            elif b is None:
-                status = "left"
-            else:
-                status = "same" if a == b else "diff"
-            self._rows.append((name, a, b, status))
-        self._rebuild()
-
-    def swap_sides(self):
-        if self.left_pkg:
-            self.set_packages(self.right_pkg, self.left_pkg)
-            self.swapped.emit()
-
-    def _rebuild(self, *_):
-        if not self.left_pkg:
-            return
-        self.header.setText(
-            f"<b>{self.left_pkg.name}</b> &nbsp;vs&nbsp; <b>{self.right_pkg.name}</b>"
-        )
-        counts = {k: 0 for k in STATUS}
-        self.tree.clear()
-        for name, a, b, status in self._rows:
-            counts[status] += 1
-            if self.only_diffs.isChecked() and status == "same":
-                continue
-            label, color = STATUS[status]
-            item = QTreeWidgetItem(
-                [
-                    label,
-                    name,
-                    human_size(len(a)) if a is not None else "-",
-                    human_size(len(b)) if b is not None else "-",
-                ]
-            )
-            item.setData(0, PATH_ROLE, name)
-            for col in range(4):
-                item.setBackground(col, QBrush(color))
-            self.tree.addTopLevelItem(item)
-        for col in (0, 2, 3):
-            self.tree.resizeColumnToContents(col)
-        self.message.emit(
-            f"{len(self._rows)} parts: {counts['same']} identical, {counts['diff']} different, "
-            f"{counts['left']} only in left, {counts['right']} only in right"
-        )
-        if self.tree.topLevelItemCount():
-            self.tree.setCurrentItem(self.tree.topLevelItem(0))
-        else:
-            self.diff.show_message("No parts to show.")
-
-    def _on_current_changed(self, cur, _prev):
-        if not cur:
-            return
-        name = cur.data(0, PATH_ROLE)
-        _, a, b, status = next(r for r in self._rows if r[0] == name)
-        left_title = f"{self.left_pkg.name}/{name}" if a is not None else "(missing)"
-        right_title = f"{self.right_pkg.name}/{name}" if b is not None else "(missing)"
-        if not is_xml_part(name):
-            if status == "same":
-                note = "Identical (not an XML part)."
-            else:
-                digests = [
-                    hashlib.sha256(x).hexdigest()[:16] if x is not None else "-"
-                    for x in (a, b)
-                ]
-                note = (
-                    f"Not an XML part, so no text diff. Sizes: "
-                    f"{human_size(len(a)) if a is not None else '-'} vs "
-                    f"{human_size(len(b)) if b is not None else '-'}; "
-                    f"sha256: {digests[0]} vs {digests[1]}"
-                )
-            self.diff.show_message(note, left_title, right_title)
-            return
-        self._token += 1
-        self.diff.show_message("Computing differences...", left_title, right_title)
-        worker = Worker(self._token, build_diff, a, b)
-        worker.done.connect(
-            lambda tok, res, t=(left_title, right_title): self._diff_ready(tok, res, *t)
-        )
-        worker.finished.connect(lambda w=worker: self._workers.discard(w))
-        self._workers.add(worker)
-        worker.start()
-
-    def _diff_ready(self, token, result, left_title, right_title):
-        if token != self._token:
-            return
-        if isinstance(result, Exception):
-            self.diff.show_message(
-                f"Could not compute the diff: {result}", left_title, right_title
-            )
-        else:
-            self.diff.show_result(result, left_title, right_title)
-
-
-class WarningsTab(QWidget):
-    activated = pyqtSignal(object, str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Document", "Part", "Warning"])
-        self.tree.setRootIsDecorated(False)
-        self.tree.setWordWrap(True)
-        self.tree.itemActivated.connect(self._on_activated)
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.tree)
-
-    def set_rows(self, rows):
-        self.tree.clear()
-        for pkg, part, text in rows:
-            item = QTreeWidgetItem([pkg.name, part, text])
-            item.setToolTip(0, pkg.path)
-            item.setData(0, PATH_ROLE, (pkg, part))
-            self.tree.addTopLevelItem(item)
-        for col in (0, 1):
-            self.tree.resizeColumnToContents(col)
-
-    def _on_activated(self, item, _col):
-        pkg, part = item.data(0, PATH_ROLE)
-        if part:
-            self.activated.emit(pkg, part)
-
-
-class PathLabel(QLabel):
-    SEPARATOR = "   vs   "
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._paths = []
-        self.hide()
-
-    def set_paths(self, paths):
-        self._paths = list(paths)
-        self.setToolTip("\n".join(self._paths))
-        self.setVisible(bool(self._paths))
-        self._elide()
-        self.updateGeometry()
-
-    def _full_text(self):
-        return self.SEPARATOR.join(self._paths)
-
-    def sizeHint(self):
-        return QSize(
-            self.fontMetrics().horizontalAdvance(self._full_text()) + 12,
-            super().sizeHint().height(),
-        )
-
-    def minimumSizeHint(self):
-        return QSize(0, super().minimumSizeHint().height())
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._elide()
-
-    def _elide(self):
-        if not self._paths:
-            self.setText("")
-            return
-        metrics = self.fontMetrics()
-        count = len(self._paths)
-        gaps = metrics.horizontalAdvance(self.SEPARATOR) * (count - 1)
-        avail = max(self.width() - 12 - gaps, 40 * count)
-        natural = [metrics.horizontalAdvance(p) for p in self._paths]
-        even = avail // count
-        if sum(natural) <= avail:
-            shares = natural
-        else:
-            spare = sum(even - w for w in natural if w < even)
-            longer = sum(1 for w in natural if w >= even)
-            shares = [w if w < even else even + spare // longer for w in natural]
-        self.setText(
-            self.SEPARATOR.join(
-                metrics.elidedText(p, Qt.TextElideMode.ElideMiddle, share)
-                for p, share in zip(self._paths, shares)
-            )
-        )
-
-
-class CompareFileDialog(QFileDialog):
-
-    def __init__(self, parent, title, directory, limit):
-        super().__init__(parent, title, directory, OPEN_FILTER)
-        self.limit = limit
-        self.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        self.setFileMode(
-            QFileDialog.FileMode.ExistingFiles
-            if limit > 1
-            else QFileDialog.FileMode.ExistingFile
-        )
-        self._hint_text = (
-            "Select one or two documents (Ctrl or Shift to select two)."
-            if limit > 1
-            else "Select one document."
-        )
-        self.hint = QLabel(self._hint_text)
-        grid = self.layout()
-        grid.addWidget(self.hint, grid.rowCount(), 0, 1, grid.columnCount())
-        for name in ("listView", "treeView"):
-            view = self.findChild(QAbstractItemView, name)
-            if view is not None:
-                view.selectionModel().selectionChanged.connect(self._schedule_check)
-        self.findChild(QLineEdit, "fileNameEdit").textChanged.connect(
-            self._schedule_check
-        )
-        self._check()
-
-    def _selected_count(self):
-        for name in ("listView", "treeView"):
-            view = self.findChild(QAbstractItemView, name)
-            if view is not None and view.isVisibleTo(self):
-                return len(view.selectionModel().selectedRows())
-        return 0
-
-    def _schedule_check(self, *_):
-        QTimer.singleShot(0, self._check)
-
-    def _check(self):
-        too_many = self._selected_count() > self.limit
-        button = self.findChild(QDialogButtonBox).button(
-            QDialogButtonBox.StandardButton.Open
-        )
-        if button is not None and too_many:
-            button.setEnabled(False)
-        self.hint.setText(
-            f"Only {self.limit} document(s) can be compared at once. Deselect the extras."
-            if too_many
-            else self._hint_text
-        )
-        self.hint.setStyleSheet("color: #cc0000;" if too_many else "")
-
-    def accept(self):
-        if len(self.selectedFiles()) > self.limit:
-            QMessageBox.warning(
-                self,
-                "Too many documents",
-                f"Please select no more than {self.limit} document(s).",
-            )
-            return
-        super().accept()
-
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle(f"{APP_NAME} v{VERSION}")
-        self.resize(1200, 760)
-        self.setAcceptDrops(True)
-
-        self.viewer = ViewerTab()
-        self.compare = CompareTab()
-        self.warnings = WarningsTab()
-        self.warnings.activated.connect(self._goto_warning_part)
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self.viewer, "Viewer / Editor")
-        self.tabs.addTab(self.compare, "Compare")
-        self.setCentralWidget(self.tabs)
-        self.viewer.message.connect(self.statusBar().showMessage)
-        self.compare.message.connect(self.statusBar().showMessage)
-        self._active_packages = []
-        self.path_label = PathLabel()
-        self.statusBar().addPermanentWidget(self.path_label)
-        self.compare.swapped.connect(self._compare_swapped)
-
-        def action(text, slot, shortcut=None):
-            act = QAction(text, self)
-            act.triggered.connect(slot)
-            if shortcut:
-                act.setShortcut(QKeySequence(shortcut))
-            return act
-
-        self.save_part_action = action("&Save Part", self.viewer.save_part, "Ctrl+S")
-        self.save_package_action = action(
-            "Save Package &As...", self.save_package_as, "Ctrl+Shift+S"
-        )
-        self.extract_action = action("&Extract Part...", self.viewer.extract_part)
-        self.report_action = action(
-            "Export Compare &Report (PDF)...", self.compare.export_report
-        )
-        self.close_action = action("&Close File(s)", self.close_files, "Ctrl+W")
-
-        file_menu = self.menuBar().addMenu("&File")
-        file_menu.addAction(action("&Open...", self.open_dialog, "Ctrl+O"))
-        file_menu.addAction(
-            action("&Compare Documents...", self.compare_dialog, "Ctrl+D")
-        )
-        file_menu.addSeparator()
-        file_menu.addAction(self.save_part_action)
-        file_menu.addAction(self.save_package_action)
-        file_menu.addAction(self.extract_action)
-        file_menu.addAction(self.report_action)
-        file_menu.addSeparator()
-        file_menu.addAction(self.close_action)
-        file_menu.addSeparator()
-        file_menu.addAction(action("&Quit", self.close, "Ctrl+Q"))
-        help_menu = self.menuBar().addMenu("&Help")
-        help_menu.addAction(action("&About", self.about))
-
-        self.viewer.changed.connect(self._update_title)
-        self.viewer.changed.connect(self._update_actions)
-        self._update_actions()
-        self.statusBar().showMessage("Open a document, or drop one onto the window.")
-
-    def _update_actions(self):
-        loaded = self.viewer.pkg is not None
-        self.save_part_action.setEnabled(loaded)
-        self.save_package_action.setEnabled(loaded)
-        self.extract_action.setEnabled(loaded and self.viewer._part is not None)
-        self.report_action.setEnabled(self.compare.left_pkg is not None)
-        self.close_action.setEnabled(loaded or self.compare.left_pkg is not None)
-
-    def close_files(self):
-        if not self.viewer.can_discard():
-            return False
-        self.compare.clear()
-        self.viewer.unload()
-        self._active_packages = []
-        self._refresh_views()
-        self.tabs.setCurrentWidget(self.viewer)
-        self._update_actions()
-        self.statusBar().showMessage("Open a document, or drop one onto the window.")
-        return True
-
-    def _update_title(self):
-        pkg = self.viewer.pkg
-        star = " *" if self.viewer.is_dirty() else ""
-        title = f"{APP_NAME} v{VERSION}"
-        self.setWindowTitle(f"{pkg.name}{star} - {title}" if pkg else title)
-
-    def _compare_swapped(self):
-        self._active_packages = [self.compare.left_pkg, self.compare.right_pkg]
-        self._refresh_views()
-
-    def _refresh_views(self):
-        self.path_label.set_paths([pkg.path for pkg in self._active_packages])
-        self._refresh_warnings()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, "path_label"):
-            self.path_label.setMaximumWidth(max(self.width() // 2, 200))
-
-    def _refresh_warnings(self):
-        rows, seen = [], set()
-        for pkg in self._active_packages:
-            for part, text in pkg.warnings:
-                if (pkg.path, part, text) not in seen:
-                    seen.add((pkg.path, part, text))
-                    rows.append((pkg, part, text))
-        index = self.tabs.indexOf(self.warnings)
-        if not rows:
-            if index != -1:
-                self.tabs.removeTab(index)
-            return
-        self.warnings.set_rows(rows)
-        title = (
-            f"Warning ({len(rows)})" if len(rows) == 1 else f"Warnings ({len(rows)})"
-        )
-        if index == -1:
-            self.tabs.addTab(self.warnings, title)
-        else:
-            self.tabs.setTabText(index, title)
-
-    def _goto_warning_part(self, pkg, part):
-        item = self.viewer._item_for(part) if pkg is self.viewer.pkg else None
-        if item:
-            self.tabs.setCurrentWidget(self.viewer)
-            self.viewer.tree.setCurrentItem(item)
-
-    def save_package_as(self):
-        saved = self.viewer.save_package_as()
-        self._refresh_views()
-        return saved
-
-    def _load_package(self, path):
-        path = os.path.normpath(path)
-        try:
-            return OOXMLPackage(path)
-        except (zipfile.BadZipFile, OSError) as e:
-            if is_ole_file(path):
-                reason = "This is an OLE compound file, not a zip package."
-            else:
-                reason = f"This does not look like an OOXML (zip) file.\n{e}"
-            QMessageBox.critical(self, "Error opening file", f"{path}\n\n{reason}")
-            return None
-
-    def open_dialog(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open document", "", OPEN_FILTER)
-        if path:
-            self.open_document(path)
-
-    def open_document(self, path):
-        if not self.viewer.can_discard():
-            return
-        pkg = self._load_package(path)
-        if pkg:
-            self.compare.clear()
-            self.viewer.load(pkg)
-            self.tabs.setCurrentWidget(self.viewer)
-            self.statusBar().showMessage(
-                "; ".join([f"{len(pkg.data)} parts", *pkg.notes])
-            )
-            self._active_packages = [pkg]
-            self._refresh_views()
-            self._update_actions()
-
-    def _pick_documents(self, title, directory, limit):
-        dialog = CompareFileDialog(self, title, directory, limit)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return []
-        return [os.path.normpath(f) for f in dialog.selectedFiles()]
-
-    def compare_dialog(self):
-        start = os.path.dirname(self.viewer.pkg.path) if self.viewer.pkg else ""
-        files = self._pick_documents("Choose one or two documents to compare", start, 2)
-        if len(files) == 1:
-            more = self._pick_documents(
-                f"Compare {os.path.basename(files[0])} with...",
-                os.path.dirname(files[0]),
-                1,
-            )
-            files += more
-        if len(files) == 2:
-            self.compare_documents(files[0], files[1])
-
-    def compare_documents(self, left, right):
-        a, b = self._load_package(left), self._load_package(right)
-        if a and b:
-            self.compare.clear()
-            self.compare.set_packages(a, b)
-            self.tabs.setCurrentWidget(self.compare)
-            self._active_packages = [a, b]
-            self._refresh_views()
-            self._update_actions()
-
-    def about(self):
-        QMessageBox.about(
-            self,
-            f"{APP_NAME} v{VERSION}",
-            f"<b>{APP_NAME} v{VERSION}</b><br>View, edit and compare OOXML packages.<br><br>"
-            "A Python 3 port of the OOXML Tools browser extension by Atul Moglewar.<br>"
-            "Created by Corey Forman (digitalsleuth).<br><br>"
-            f'<a href="{GITHUB}">View the source on GitHub</a>',
-        )
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        paths = [u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()]
-        if len(paths) == 1:
-            self.open_document(paths[0])
-        elif len(paths) >= 2:
-            self.compare_documents(paths[0], paths[1])
-
-    def closeEvent(self, event):
-        if self.viewer.can_discard():
-            event.accept()
-        else:
-            event.ignore()
-
-
 def main(argv=None):
-    argv = sys.argv if argv is None else argv
-    app = QApplication(argv)
-    app.setApplicationName(APP_NAME)
-    app.setApplicationDisplayName(f"{APP_NAME} v{VERSION}")
-    icon = QPixmap()
-    icon.loadFromData(base64.b64decode(__fingerprint__))
-    app.setWindowIcon(QIcon(icon))
-    win = MainWindow()
-    win.show()
-    paths = [a for a in argv[1:] if os.path.isfile(a)]
-    if len(paths) == 1:
-        win.open_document(paths[0])
-    elif len(paths) >= 2:
-        win.compare_documents(paths[0], paths[1])
-    return app.exec()
+    from pyooxml import gui
+
+    return gui.main(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    if not __package__ and not getattr(sys, "frozen", False):
+        # run as a script: import from the folder above, so "pyooxml" is the package
+        sys.path[0] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.exit(main())

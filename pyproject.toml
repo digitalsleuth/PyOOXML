@@ -5,6 +5,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["pyooxml*"]
 
+[tool.setuptools.package-data]
+"pyooxml._vendor.qt_themes" = ["LICENSE"]
+
 [tool.setuptools.dynamic]
 version = {attr = "pyooxml.pyooxml.VERSION"}
 
@@ -14,7 +17,7 @@ dynamic = ["version"]
 dependencies = [
     "PyQt6"
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   {name = "Corey Forman (digitalsleuth)", email = "corey@digitalsleuth.ca"}
 ]
@@ -35,4 +38,4 @@ classifiers = [
 Homepage = "https://github.com/digitalsleuth/PyOOXML"
 
 [project.gui-scripts]
-pyooxml = "pyooxml.pyooxml:main"
+pyooxml = "pyooxml.gui:main"
